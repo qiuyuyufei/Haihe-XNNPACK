@@ -9,7 +9,6 @@
 #define __riscv_vse32_v_f32m1   vse32_v_f32m1      // 将向量寄存器中的vl个元素存到数组c中
 
 #define __riscv_vfadd_vf_f32m8             vfadd_vf_f32m8
-#define __riscv_vfadd_vv_f32m4_tu          vfadd_vv_f32m4_tu
 #define __riscv_vfcvt_f_x_v_f32m8          vfcvt_f_x_v_f32m8
 #define __riscv_vfcvt_x_f_v_i32m8          vfcvt_x_f_v_i32m8
 #define __riscv_vfcvt_xu_f_v_u32m8         vfcvt_xu_f_v_u32m8
@@ -17,20 +16,14 @@
 #define __riscv_vfmadd_vv_f32m4            vfmadd_vv_f32m4
 #define __riscv_vfmax_vf_f32m4             vfmax_vf_f32m4
 #define __riscv_vfmax_vf_f32m8             vfmax_vf_f32m8
-#define __riscv_vfmax_vv_f32m8_tu          vfmax_vv_f32m8_tu
 #define __riscv_vfmin_vf_f32m8             vfmin_vf_f32m8
-#define __riscv_vfmin_vv_f32m8_tu          vfmin_vv_f32m8_tu
 #define __riscv_vfmul_vf_f32m4             vfmul_vf_f32m4
 #define __riscv_vfmul_vf_f32m8             vfmul_vf_f32m8
 #define __riscv_vfmul_vv_f32m4             vfmul_vv_f32m4
 #define __riscv_vfmv_f_s_f32m1_f32         vfmv_f_s_f32m1_f32
-#define __riscv_vfmv_s_f_f32m1             vfmv_s_f_f32m1
 #define __riscv_vfmv_v_f_f32m4             vfmv_v_f_f32m4
 #define __riscv_vfncvt_x_f_w_i16m2         vfncvt_x_f_w_i16m2
 #define __riscv_vfnmsac_vf_f32m4           vfnmsac_vf_f32m4
-#define __riscv_vfredmax_vs_f32m8_f32m1    vfredmax_vs_f32m8_f32m1
-#define __riscv_vfredmin_vs_f32m8_f32m1    vfredmin_vs_f32m8_f32m1
-#define __riscv_vfredusum_vs_f32m4_f32m1   vfredusum_vs_f32m4_f32m1
 #define __riscv_vfsub_vf_f32m4             vfsub_vf_f32m4
 #define __riscv_vfwcvt_f_x_v_f32m4         vfwcvt_f_x_v_f32m4
 #define __riscv_vle32_v_f32m4              vle32_v_f32m4
@@ -59,5 +52,12 @@
 #define __riscv_vwsubu_vx_u16m4            vwsubu_vx_u16m4
 #define __riscv_vwsub_vx_i16m4             vwsub_vx_i16m4
 
+#define __riscv_vfadd_vv_f32m4_tu(vsum, vsum1, vexp, vl)	vfadd_vv_f32m4(vsum, vexp, vl)
+#define __riscv_vfmax_vv_f32m8_tu(t0, t1, vec, vl)		vfmax_vv_f32m8(t0, vec, vl)
+#define __riscv_vfmin_vv_f32m8_tu(t0, t1, vec, vl)		vfmin_vv_f32m8(t0, vec, vl)
 
+//#define __riscv_vfredusum_vs_f32m4_f32m1   vfredusum_vs_f32m4_f32m1
+//#define __riscv_vfredmax_vs_f32m8_f32m1    vfredmax_vs_f32m8_f32m1
+//#define __riscv_vfredmin_vs_f32m8_f32m1    vfredmin_vs_f32m8_f32m1
+//#define __riscv_vfmv_s_f_f32m1(src, v1)             vfmv_s_f_f32m1(v1)
 #endif 

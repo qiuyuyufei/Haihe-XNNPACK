@@ -105,101 +105,116 @@ static inline vfloat32m4_t softexp_f32m4(
   return u;
 }
 
-//void xnn_f32_raddstoreexpminusmax_ukernel__rvv_rr2_p6_u4v(
-//    size_t batch,
-//    const float* input,
-//    const float* max,
-//    float* output,
-//    float* sum,
-//    const union xnn_f32_expminus_params params[restrict XNN_MIN_ELEMENTS(1)])
-//{
-//  assert(batch != 0);
-//  assert(batch % sizeof(float) == 0);
-//  assert(input != NULL);
-//  assert(max != NULL);
-//  assert(output != NULL);
-//  assert(sum != NULL);
-//
-//  size_t n = batch >> 2;
-//  size_t avl = n;
-//  size_t vl = __riscv_vsetvl_e32m4(n);
-//
-//  vfloat32m4_t vsum = __riscv_vfmv_v_f_f32m4(0.0f, vl);
-//  do {
-//    vl = __riscv_vsetvl_e32m4(avl);
-//    avl -= vl;
-//    vfloat32m4_t vx = __riscv_vle32_v_f32m4(input, vl);
-//    vx = __riscv_vfsub_vf_f32m4(vx, *max, vl);
-//    input += vl;
-//    vfloat32m4_t vexp = softexp_f32m4(vx, vl, params);
-//    __riscv_vse32_v_f32m4(output, vexp, vl);
-//    output += vl;
-//    vsum = __riscv_vfadd_vv_f32m4_tu(vsum, vsum, vexp, vl);
-//  } while(avl > 0);
-//
-//  vfloat32m1_t v0 = __riscv_vfmv_s_f_f32m1(0.0f, 1);
-//  *sum = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredusum_vs_f32m4_f32m1(vsum, v0, n));
-//}
-//
-//void xnn_f32_rmax_ukernel__rvv_u8v(
-//    size_t batch,
-//    const float* input,
-//    float* output,
-//    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
-//{
-//  assert(batch != 0);
-//  assert(batch % sizeof(float) == 0);
-//  assert(input != NULL);
-//  assert(output != NULL);
-//
-//  size_t N = batch >> 2;
-//  size_t avl;
-//  size_t vl = __riscv_vsetvl_e32m8(N);
-//
-//  vfloat32m8_t t0 = __riscv_vle32_v_f32m8(input, vl);
-//  input += vl;
-//
-//  for (avl = N - vl; avl; avl -= vl, input += vl) {
-//    vl = __riscv_vsetvl_e32m8(avl);
-//    vfloat32m8_t vec = __riscv_vle32_v_f32m8(input, vl);
-//    t0 = __riscv_vfmax_vv_f32m8_tu(t0, t0, vec, vl);
-//  }
-//
-//  vfloat32m1_t fmax = __riscv_vfmv_s_f_f32m1(-INFINITY, 1);
-//  output[0] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmax_vs_f32m8_f32m1(t0, fmax, N));
-//}
-//
-//void xnn_f32_rminmax_ukernel__rvv_u8v(
-//    size_t batch,
-//    const float* input,
-//    float* output,
-//    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
-//{
-//  assert(batch != 0);
-//  assert(batch % sizeof(float) == 0);
-//  assert(input != NULL);
-//  assert(output != NULL);
-//
-//  size_t N = batch >> 2;
-//  size_t avl;
-//  size_t vl = __riscv_vsetvl_e32m8(N);
-//
-//  vfloat32m8_t t0 = __riscv_vle32_v_f32m8(input, vl);
-//  input += vl;
-//  vfloat32m8_t t1 = __riscv_vmv_v_v_f32m8(t0, vl);
-//
-//  for (avl = N - vl; avl; avl -= vl, input += vl) {
-//    vl = __riscv_vsetvl_e32m8(avl);
-//    vfloat32m8_t vec = __riscv_vle32_v_f32m8(input, vl);
-//    t0 = __riscv_vfmin_vv_f32m8_tu(t0, t0, vec, vl);
-//    t1 = __riscv_vfmax_vv_f32m8_tu(t1, t1, vec, vl);
-//  }
-//
-//  vfloat32m1_t fmin = __riscv_vfmv_s_f_f32m1(INFINITY, 1);
-//  vfloat32m1_t fmax = __riscv_vfmv_s_f_f32m1(-INFINITY, 1);
-//  output[0] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmin_vs_f32m8_f32m1(t0, fmin, N));
-//  output[1] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmax_vs_f32m8_f32m1(t1, fmax, N));
-//}
+void xnn_f32_raddstoreexpminusmax_ukernel__rvv_rr2_p6_u4v(
+    size_t batch,
+    const float* input,
+    const float* max,
+    float* output,
+    float* sum,
+    const union xnn_f32_expminus_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(max != NULL);
+  assert(output != NULL);
+  assert(sum != NULL);
+
+  size_t n = batch >> 2;
+  size_t avl = n;
+  size_t vl = __riscv_vsetvl_e32m4(n);
+
+  vfloat32m4_t vsum = __riscv_vfmv_v_f_f32m4(0.0f, vl);
+  do {
+    vl = __riscv_vsetvl_e32m4(avl);
+    avl -= vl;
+    vfloat32m4_t vx = __riscv_vle32_v_f32m4(input, vl);
+    vx = __riscv_vfsub_vf_f32m4(vx, *max, vl);
+    input += vl;
+    vfloat32m4_t vexp = softexp_f32m4(vx, vl, params);
+    __riscv_vse32_v_f32m4(output, vexp, vl);
+    output += vl;
+    vsum = __riscv_vfadd_vv_f32m4_tu(vsum, vsum, vexp, vl);
+  } while(avl > 0);
+
+  //vfloat32m1_t v0 = __riscv_vfmv_s_f_f32m1(0.0f, 1);
+  //*sum = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredusum_vs_f32m4_f32m1(vsum, v0, n));
+  vfloat32m1_t v0, v1;
+  v0 = vfmv_s_f_f32m1(v0, 0.0f, 1);
+  v1 = vfredosum_vs_f32m4_f32m1(v1, vsum, v0, n);
+  *sum = __riscv_vfmv_f_s_f32m1_f32(v1);
+}
+
+void xnn_f32_rmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+
+  size_t N = batch >> 2;
+  size_t avl;
+  size_t vl = __riscv_vsetvl_e32m8(N);
+
+  vfloat32m8_t t0 = __riscv_vle32_v_f32m8(input, vl);
+  input += vl;
+
+  for (avl = N - vl; avl; avl -= vl, input += vl) {
+    vl = __riscv_vsetvl_e32m8(avl);
+    vfloat32m8_t vec = __riscv_vle32_v_f32m8(input, vl);
+    t0 = __riscv_vfmax_vv_f32m8_tu(t0, t0, vec, vl);
+  }
+
+  //vfloat32m1_t fmax = __riscv_vfmv_s_f_f32m1(-INFINITY, 1);
+  //output[0] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmax_vs_f32m8_f32m1(t0, fmax, N));
+  vfloat32m1_t fmax, v0;
+  fmax = vfmv_s_f_f32m1(fmax, -INFINITY, 1);
+  v0 = vfredmax_vs_f32m8_f32m1(v0, t0, fmax, N);
+  output[0] = __riscv_vfmv_f_s_f32m1_f32(v0);
+}
+
+void xnn_f32_rminmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+
+  size_t N = batch >> 2;
+  size_t avl;
+  size_t vl = __riscv_vsetvl_e32m8(N);
+
+  vfloat32m8_t t0 = __riscv_vle32_v_f32m8(input, vl);
+  input += vl;
+  vfloat32m8_t t1 = __riscv_vmv_v_v_f32m8(t0, vl);
+
+  for (avl = N - vl; avl; avl -= vl, input += vl) {
+    vl = __riscv_vsetvl_e32m8(avl);
+    vfloat32m8_t vec = __riscv_vle32_v_f32m8(input, vl);
+    t0 = __riscv_vfmin_vv_f32m8_tu(t0, t0, vec, vl);
+    t1 = __riscv_vfmax_vv_f32m8_tu(t1, t1, vec, vl);
+  }
+
+  //vfloat32m1_t fmin = __riscv_vfmv_s_f_f32m1(INFINITY, 1);
+  //vfloat32m1_t fmax = __riscv_vfmv_s_f_f32m1(-INFINITY, 1);
+  //output[0] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmin_vs_f32m8_f32m1(t0, fmin, N));
+  //output[1] = __riscv_vfmv_f_s_f32m1_f32(__riscv_vfredmax_vs_f32m8_f32m1(t1, fmax, N));
+  vfloat32m1_t fmin, fmax, v0, v1;
+  fmin = vfmv_s_f_f32m1(fmin, INFINITY, 1);
+  fmax = vfmv_s_f_f32m1(fmax, -INFINITY, 1);
+  v0 = vfredmin_vs_f32m8_f32m1(v0, t0, fmin, N);
+  v1 = vfredmax_vs_f32m8_f32m1(v1, t1, fmax, N);
+  output[0] = __riscv_vfmv_f_s_f32m1_f32(v0);
+  output[1] = __riscv_vfmv_f_s_f32m1_f32(v1);
+}
 
 void xnn_qs8_vmul_minmax_fp32_ukernel__rvv_u2v(
     size_t batch,
