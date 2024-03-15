@@ -755,6 +755,7 @@ DECLARE_F32_VLRELU_UKERNEL_FUNCTION(xnn_f32_vlrelu_ukernel__scalar_u1)
 DECLARE_F32_VLRELU_UKERNEL_FUNCTION(xnn_f32_vlrelu_ukernel__scalar_u2)
 DECLARE_F32_VLRELU_UKERNEL_FUNCTION(xnn_f32_vlrelu_ukernel__scalar_u4)
 
+DECLARE_F32_VLRELU_UKERNEL_FUNCTION(xnn_f32_vlrelu_ukernel__rvv_u8v)
 
 #define DECLARE_F32_VNEG_UKERNEL_FUNCTION(fn_name) \
   XNN_INTERNAL void fn_name(                       \

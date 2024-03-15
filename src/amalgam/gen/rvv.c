@@ -394,3 +394,34 @@ void xnn_qu8_vmulc_minmax_fp32_ukernel__rvv_u2v(
     batch -= n;
   } while (batch != 0);
 }
+
+
+void xnn_f32_vlrelu_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+	assert(batch != 0);
+	assert(batch % sizeof(float) == 0);
+	assert(input != NULL);
+	assert(output != NULL);
+
+	const float vslope = params->scalar.slope;
+	size_t size = batch / sizeof(float);
+
+	do {
+		const size_t n = vsetvl_e32m8(size);
+
+		vfloat32m8_t in_u8v = vle32_v_f32m8(input, n);
+		input += n;
+		vbool4_t mask = vmflt_vf_f32m8_b4(in_u8v, .0f, n);
+		vfloat32m8_t out_u8v = vfmul_vf_f32m8_m(mask, in_u8v, in_u8v, vslope, n);
+		//vfloat32m8_t out_u8v = vfmax_vf_f32m8(in_u8v, .0f, n);
+		vse32_v_f32m8(output, out_u8v, n);
+
+		output += n;
+		size -= n;
+	} while (size > 0);
+}
+
