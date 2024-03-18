@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <time.h>
 
 //#include <riscv_vector.h>
 #include "riscv_v_071_fix.h"
@@ -395,7 +396,6 @@ void xnn_qu8_vmulc_minmax_fp32_ukernel__rvv_u2v(
   } while (batch != 0);
 }
 
-
 void xnn_f32_vlrelu_ukernel__rvv_u8v(
     size_t batch,
     const float* input,
@@ -425,3 +425,47 @@ void xnn_f32_vlrelu_ukernel__rvv_u8v(
 	} while (size > 0);
 }
 
+
+void xnn_f32_gemm_ukernel_1x4__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+	assert(mr != 0);
+	assert(mr <= 1);
+	assert(nc != 0);
+	assert(kc != 0);
+	assert(kc % sizeof(float) == 0);
+	assert(a != NULL);
+	assert(w != NULL);
+	assert(c != NULL);
+
+	const float* a0 = a;
+	float* c0 = c;
+	size_t kcl = kc / sizeof(float);
+
+	do {
+		size_t vl = vsetvl_e32m1(nc);
+		vfloat32m1_t vacc = vle32_v_f32m1(w, vl);
+		w += vl;
+		for(size_t k = 0; k < kcl ; k++){
+			vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+			w += vl;
+			vacc = vfmacc_vf_f32m1(vacc, *a0, vw, vl);
+			a0++;
+		}
+		vse32_v_f32m1(c0, vacc, vl);
+		if(nc >= 4){
+      		c0 = (float*) ((uintptr_t) c0 + cn_stride);
+      		a0 = (const void*) ((uintptr_t) a0 - kc);
+		}
+		nc -= vl;
+	} while (nc != 0);
+}
