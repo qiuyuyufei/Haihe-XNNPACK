@@ -510,7 +510,7 @@ void xnn_f32_gemm_ukernel_2x4__rvv_u1v(
       vacc1 = vfmacc_vv_f32m1(vacc1, va1, vw, vl); // update 1st row count
       a0++;
       a1++;
-      w += vl; // 【修改位置】移动权重矩阵w的指针，应在内循环外
+      w += vl; // move matrix w pointer
     }
     vse32_v_f32m1(c0, vacc0, vl); // store 0th row result
     vse32_v_f32m1(c1, vacc1, vl); // store 1st row result
