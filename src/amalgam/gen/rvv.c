@@ -427,6 +427,50 @@ void xnn_f32_vlrelu_ukernel__rvv_u8v(
 
 
 void xnn_f32_gemm_ukernel_1x4__rvv_u1v(
+    size_t mr, // max row
+    size_t nc, // next col
+    size_t kc, // dimention inside
+    const float* restrict a, // pointer to matrix A
+    size_t a_stride, // row direction span for A, num of elem which need to skip from begin of one row to next row
+    const float* restrict w, // pointer to matrix B
+    float* restrict c, // pointer to matrix C, the result of AxB
+    size_t cm_stride, // row direction span for C
+    size_t cn_stride, // col direction span for C
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) //some default param
+{
+	assert(mr != 0);
+	assert(mr <= 1); // max process 1 row
+	assert(nc != 0);
+	assert(kc != 0);
+	assert(kc % sizeof(float) == 0);
+	assert(a != NULL);
+	assert(w != NULL);
+	assert(c != NULL);
+
+	const float* a0 = a; // matrix a 0th row pointer
+	float* c0 = c; // 0th row start pointer
+	size_t kcl = kc / sizeof(float);
+
+	do {
+		size_t vl = vsetvl_e32m1(nc); // vector length
+		vfloat32m1_t vacc = vle32_v_f32m1(w, vl); // 1st row count
+		w += vl;
+		for(size_t k = 0; k < kcl ; k++){
+			vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+			w += vl;
+			vacc = vfmacc_vf_f32m1(vacc, *a0, vw, vl); // update 1st row count
+			a0++;
+		}
+		vse32_v_f32m1(c0, vacc, vl); // store 1st row result
+		if(nc >= 4){
+      		c0 = (float*) ((uintptr_t) c0 + cn_stride); // update 1st row matrix C pointer
+      		a0 = (const void*) ((uintptr_t) a0 - kc); // update 1st row matrix A pointer
+		}
+		nc -= vl;
+	} while (nc != 0);
+}
+
+void xnn_f32_gemm_ukernel_2x4__rvv_u1v(
     size_t mr,
     size_t nc,
     size_t kc,
@@ -438,34 +482,131 @@ void xnn_f32_gemm_ukernel_1x4__rvv_u1v(
     size_t cn_stride,
     const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
-	assert(mr != 0);
-	assert(mr <= 1);
-	assert(nc != 0);
-	assert(kc != 0);
-	assert(kc % sizeof(float) == 0);
-	assert(a != NULL);
-	assert(w != NULL);
-	assert(c != NULL);
+  assert(mr != 0);
+  assert(mr <= 2); // max process 2 row
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
 
-	const float* a0 = a;
-	float* c0 = c;
-	size_t kcl = kc / sizeof(float);
+  const float* a0 = a; // matrix a row 0 pointer
+  const float* a1 = a + a_stride; // matrix a row 1 pointer
+  float* c0 = c; // row 0 start pointer
+  float* c1 = c + cm_stride; // row 1 start pointer
+  size_t kcl = kc / sizeof(float);
 
-	do {
-		size_t vl = vsetvl_e32m1(nc);
-		vfloat32m1_t vacc = vle32_v_f32m1(w, vl);
-		w += vl;
-		for(size_t k = 0; k < kcl ; k++){
-			vfloat32m1_t vw = vle32_v_f32m1(w, vl);
-			w += vl;
-			vacc = vfmacc_vf_f32m1(vacc, *a0, vw, vl);
-			a0++;
-		}
-		vse32_v_f32m1(c0, vacc, vl);
-		if(nc >= 4){
-      		c0 = (float*) ((uintptr_t) c0 + cn_stride);
-      		a0 = (const void*) ((uintptr_t) a0 - kc);
-		}
-		nc -= vl;
-	} while (nc != 0);
+  do {
+    size_t vl = vsetvl_e32m1(nc);
+    vfloat32m1_t vacc0 = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // 0th row count
+    vfloat32m1_t vacc1 = vfsub_vv_f32m1(vle32_v_f32m1(c1, vl), vle32_v_f32m1(c1, vl), vl); // 1st row count
+    w += vl;
+    for(size_t k = 0; k < kcl ; k++){
+      vfloat32m1_t va0 = vfmv_v_f_f32m1(*a0, vl); // load 0th row of matrix A
+      vfloat32m1_t va1 = vfmv_v_f_f32m1(*a1, vl); // load 1st row of matrix A
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl); // load w
+      vacc0 = vfmacc_vv_f32m1(vacc0, va0, vw, vl); // update 0th row count
+      vacc1 = vfmacc_vv_f32m1(vacc1, va1, vw, vl); // update 1st row count
+      a0++;
+      a1++;
+      w += vl; // 【修改位置】移动权重矩阵w的指针，应在内循环外
+    }
+    vse32_v_f32m1(c0, vacc0, vl); // store 0th row result
+    vse32_v_f32m1(c1, vacc1, vl); // store 1st row result
+    c0 += cn_stride; // update 0th row matrix C pointer
+    c1 += cn_stride; // update 1st row matrix C pointer
+    a0 = a; // reset 0th row matrix A pointer
+    a1 = a + a_stride; // reset 1st row matrix A pointer
+    nc -= vl;
+
+  } while (nc != 0);
+}
+
+void xnn_f32_gemm_ukernel_4x4__rvv_u1v(
+  size_t mr,
+  size_t nc,
+  size_t kc,
+  const float* restrict a,
+  size_t a_stride,
+  const float* restrict w,
+  float* restrict c,
+  size_t cm_stride,
+  size_t cn_stride,
+  const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 4); // Corrected max process 4 rows
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  // each row
+  for (size_t m = 0; m < mr; ++m) {
+    const float* a0 = a + m * a_stride; // read matrix a by row
+    float* c0 = c + m * cm_stride; // update matrix c by row
+    size_t kcl = kc / sizeof(float);
+
+    // Reset nc for each row
+    size_t current_nc = nc;
+    do {
+      size_t vl = vsetvl_e32m1(current_nc);
+      vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // Correctly initialize vacc
+      for(size_t k = 0; k < kcl ; k++){
+        vfloat32m1_t vw = vle32_v_f32m1(w, vl); // load vector w correctly
+        w += vl;
+        vacc = vfmacc_vf_f32m1(vacc, *a0++, vw, vl); // multiplication and accumulation
+      }
+      vse32_v_f32m1(c0, vacc, vl); // store result to matrix c
+      c0 += cn_stride; // update c0 pointer to write to the next 4 columns correctly
+      a0 -= kc; // reset a0 pointer to return to the beginning of the current row correctly
+      current_nc -= vl;
+    } while (current_nc != 0);
+
+    // Reset weight pointer for each row
+    w -= kcl * vl;
+  }
+}
+
+void xnn_f32_gemm_ukernel_4x2__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 4); // max process 4 row
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  // each row
+  for (size_t m = 0; m < mr; ++m) {
+    const float* a0 = a + m * a_stride; // support multi-row
+    float* c0 = c + m * cm_stride; // support multi-row
+
+    size_t kcl = kc / sizeof(float);
+    size_t vl = vsetvl_e32m1(2); // set the vector length to 2 for 2 cols processing
+    vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // Correctly initialize vacc to 0
+
+    for(size_t k = 0; k < kcl; ++k) {
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+      w += vl;
+      vacc = vfmacc_vf_f32m1(vacc, a0[k], vw, vl); // correct multiplication and accumulation
+    }
+
+    vse32_v_f32m1(c0, vacc, vl); // store result
+  }
 }
