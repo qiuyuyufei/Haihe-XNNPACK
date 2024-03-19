@@ -554,7 +554,7 @@ void xnn_f32_gemm_ukernel_4x4__rvv_u1v(
     size_t current_nc = nc;
     do {
       size_t vl = vsetvl_e32m1(current_nc);
-      vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // Correctly initialize vacc
+      vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // initialize vacc
       for(size_t k = 0; k < kcl ; k++){
         vfloat32m1_t vw = vle32_v_f32m1(w, vl); // load vector w correctly
         w += vl;
@@ -599,7 +599,7 @@ void xnn_f32_gemm_ukernel_4x2__rvv_u1v(
 
     size_t kcl = kc / sizeof(float);
     size_t vl = vsetvl_e32m1(2); // set the vector length to 2 for 2 cols processing
-    vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // Correctly initialize vacc to 0
+    vfloat32m1_t vacc = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // initialize vacc to 0
 
     for(size_t k = 0; k < kcl; ++k) {
       vfloat32m1_t vw = vle32_v_f32m1(w, vl);
