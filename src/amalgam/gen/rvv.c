@@ -611,6 +611,111 @@ void xnn_f32_gemm_ukernel_4x2__rvv_u1v(
   }
 }
 
+void xnn_f32_gemm_relu_ukernel_1x4__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 1);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  const float* a0 = a;
+  float* c0 = c;
+  size_t kcl = kc / sizeof(float);
+
+  do {
+    size_t vl = vsetvl_e32m1(nc);
+    vfloat32m1_t vacc = vle32_v_f32m1(w, vl);
+    w += vl;
+    for(size_t k = 0; k < kcl ; k++){
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+      w += vl;
+      vacc = vfmacc_vf_f32m1(vacc, *a0, vw, vl);
+      a0++;
+    }
+    vacc = vfmax_vf_f32m1(vacc, 0.0, vl);
+
+    vse32_v_f32m1(c0, vacc, vl);
+    if(nc >= 4){
+          c0 = (float*) ((uintptr_t) c0 + cn_stride);
+          a0 = (const void*) ((uintptr_t) a0 - kc);
+    }
+    nc -= vl;
+  } while (nc != 0);
+}
+
+void xnn_f32_gemm_relu_ukernel_2x4__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 2); // max process 2 row
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  const float* a0 = a;
+  const float* a1 = a + a_stride;
+  float* c0 = c;
+  float* c1 = c + cm_stride;
+  size_t kcl = kc / sizeof(float);
+
+  do {
+    size_t vl = vsetvl_e32m1(nc);
+    vfloat32m1_t vacc0 = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // 0th row count
+    vfloat32m1_t vacc1 = vfsub_vv_f32m1(vle32_v_f32m1(c1, vl), vle32_v_f32m1(c1, vl), vl); // 1st row count
+    w += vl;
+    for(size_t k = 0; k < kcl ; k++){
+      vfloat32m1_t va0 = vfmv_v_f_f32m1(*a0, vl);
+      vfloat32m1_t va1 = vfmv_v_f_f32m1(*a1, vl);
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+      vacc0 = vfmacc_vv_f32m1(vacc0, va0, vw, vl);
+      vacc1 = vfmacc_vv_f32m1(vacc1, va1, vw, vl);
+      a0++;
+      a1++;
+    }
+
+    vacc0 = vfmax_vf_f32m1(vacc0, 0.0, vl);
+    vacc1 = vfmax_vf_f32m1(vacc1, 0.0, vl);
+    vse32_v_f32m1(c0, vacc0, vl);
+    vse32_v_f32m1(c1, vacc1, vl);
+
+    if(nc >= 4){
+
+      c0 = (float*) ((uintptr_t) c0 + cn_stride);
+      c1 = (float*) ((uintptr_t) c1 + cn_stride);
+
+      a0 = (const void*) ((uintptr_t) a0 - kc);
+      a1 = (const void*) ((uintptr_t) a1 - kc);
+    }
+    nc -= vl;
+  } while (nc != 0);
+}
+
 void xnn_f32_vsigmoid_ukernel__rvv(
   size_t batch,
   const float* input,
@@ -793,4 +898,151 @@ void xnn_f32_prelu_ukernel__rvv_2x8(
     o1 = (float*) ((uintptr_t) o1 + output_increment);
     rows = doz(rows, 2);
   } while (rows != 0);
+}
+
+//向量除法
+void xnn_f32_vdiv_minmax_ukernel__rvv_u1v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+
+  size_t vl;
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态设置向量长度
+    vl = vsetvl_e32m1(batch - i);
+
+    // 加载输入向量
+    vfloat32m1_t va = vle32_v_f32m1(input_a + i, vl);
+    vfloat32m1_t vb = vle32_v_f32m1(input_b + i, vl);
+
+    // 执行向量除法
+    vfloat32m1_t vacc = vfdiv_vv_f32m1(va, vb, vl);
+
+    // 应用最小值约束
+    vacc = vfmax_vf_f32m1(vacc, params->scalar.min, vl);
+
+    // 应用最大值约束
+    vacc = vfmin_vf_f32m1(vacc, params->scalar.max, vl);
+
+    // 存储结果
+    vse32_v_f32m1(output + i, vacc, vl);
+  }
+}
+
+//向量加法
+void xnn_f32_vadd_minmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+  
+  size_t vl;
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态调整向量长度以适应剩余的数据量
+    vl = vsetvl_e32m8(batch - i);
+
+    // 加载输入向量
+    vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
+    vfloat32m8_t vb = vle32_v_f32m8(input_b + i, vl);
+
+    // 执行向量加法
+    vfloat32m8_t vacc = vfadd_vv_f32m8(va, vb, vl);
+
+    // 应用最小/最大值约束
+    vacc = vfmax_vf_f32m8(vacc, params->scalar.min, vl);
+    vacc = vfmin_vf_f32m8(vacc, params->scalar.max, vl);
+
+    // 存储结果
+    vse32_v_f32m8(output + i, vacc, vl);
+  }
+}
+
+//向量减法
+void xnn_f32_vsub_minmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+ 
+  size_t vl;
+  // 逐批处理
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态计算向量长度（VL），这次基于剩余的元素数量
+    vl = vsetvl_e32m8(batch - i);
+
+    // 加载输入向量
+    vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
+    vfloat32m8_t vb = vle32_v_f32m8(input_b + i, vl);
+
+    // 执行向量减法
+    vfloat32m8_t vacc = vfsub_vv_f32m8(va, vb, vl);
+
+    // 应用最小值约束
+    vfloat32m8_t vmin = vfmv_v_f_f32m8(params->scalar.min, vl); // 广播最小值到向量
+    vacc = vfmax_vv_f32m8(vacc, vmin, vl);
+
+    // 应用最大值约束
+    vfloat32m8_t vmax = vfmv_v_f_f32m8(params->scalar.max, vl); // 广播最大值到向量
+    vacc = vfmin_vv_f32m8(vacc, vmax, vl);
+
+    // 将结果存储回输出数组
+    vse32_v_f32m8(output + i, vacc, vl);
+  }
+}
+
+//向量乘法
+void xnn_f32_vmul_minmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+
+  size_t vl;
+  // 使用for循环进行向量处理
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态设置向量长度
+    vl = vsetvl_e32m8(batch - i);
+
+    // 加载输入向量
+    vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
+    vfloat32m8_t vb = vle32_v_f32m8(input_b + i, vl);
+
+    // 执行向量乘法
+    vfloat32m8_t vacc = vfmul_vv_f32m8(va, vb, vl);
+
+    // 应用最小值约束
+    vacc = vfmax_vf_f32m8(vacc, params->scalar.min, vl);
+
+    // 应用最大值约束
+    vacc = vfmin_vf_f32m8(vacc, params->scalar.max, vl);
+
+    // 将结果存储回output数组
+    vse32_v_f32m8(output + i, vacc, vl);
+  }
 }

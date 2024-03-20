@@ -13,7 +13,6 @@
 #include <xnnpack/math.h>
 #include <xnnpack/vbinary.h>
 
-
 void xnn_f32_vadd_minmax_ukernel__scalar_u8(
     size_t batch,
     const float* input_a,
