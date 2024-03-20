@@ -1275,7 +1275,7 @@ static void init_f32_sigmoid_config(void) {
     f32_sigmoid_config.init.f32_sigmoid = xnn_init_f32_sigmoid_scalar_rr2_lut64_p2_params;
     f32_sigmoid_config.element_tile = 2;
   #elif XNN_ARCH_RISCV
-    f32_sigmoid_config.ukernel = (xnn_vunary_ukernel_fn) xnn_f32_vsigmoid_ukernel__scalar_rr2_lut64_p2_div_u2;
+    f32_sigmoid_config.ukernel = (xnn_vunary_ukernel_fn) xnn_f32_vsigmoid_ukernel__rvv;
     f32_sigmoid_config.init.f32_sigmoid = xnn_init_f32_sigmoid_scalar_rr2_lut64_p2_params;
     f32_sigmoid_config.element_tile = 2;
   #elif XNN_ARCH_PPC64
