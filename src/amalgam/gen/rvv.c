@@ -668,4 +668,3 @@ void xnn_f32_vsigmoid_ukernel__rvv(
     vse32_v_f32m8(output + i, vf, vl);
   }
 }
-}
