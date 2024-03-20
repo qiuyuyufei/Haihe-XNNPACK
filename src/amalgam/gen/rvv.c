@@ -716,6 +716,7 @@ void xnn_f32_gemm_relu_ukernel_2x4__rvv_u1v(
   } while (nc != 0);
 }
 
+//向量除法
 void xnn_f32_vdiv_minmax_ukernel__rvv_u2v(
     size_t batch,
     const float* input_a,
@@ -751,7 +752,7 @@ void xnn_f32_vdiv_minmax_ukernel__rvv_u2v(
   }
 }
 
-
+//向量加法
 void xnn_f32_vadd_minmax_ukernel__rvv_u8v(
     size_t batch,
     const float* input_a,
@@ -782,6 +783,82 @@ void xnn_f32_vadd_minmax_ukernel__rvv_u8v(
     vacc = vfmin_vf_f32m8(vacc, params->scalar.max, vl);
 
     // 存储结果
+    vse32_v_f32m8(output + i, vacc, vl);
+  }
+}
+
+//向量减法
+void xnn_f32_vsub_minmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+ 
+  size_t vl;
+  // 逐批处理
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态计算向量长度（VL），这次基于剩余的元素数量
+    size_t vl = vsetvl_e32m8(batch - i);
+
+    // 加载输入向量
+    vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
+    vfloat32m8_t vb = vle32_v_f32m8(input_b + i, vl);
+
+    // 执行向量减法
+    vfloat32m8_t vacc = vfsub_vv_f32m8(va, vb, vl);
+
+    // 应用最小值约束
+    vfloat32m8_t vmin = vfmv_v_f_f32m8(params->scalar.min, vl); // 广播最小值到向量
+    vacc = vfmax_vv_f32m8(vacc, vmin, vl);
+
+    // 应用最大值约束
+    vfloat32m8_t vmax = vfmv_v_f_f32m8(params->scalar.max, vl); // 广播最大值到向量
+    vacc = vfmin_vv_f32m8(vacc, vmax, vl);
+
+    // 将结果存储回输出数组
+    vse32_v_f32m8(output + i, vacc, vl);
+  }
+}
+
+//向量乘法
+void xnn_f32_vmul_minmax_ukernel__rvv_u8v(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(input_a != NULL);
+  assert(input_b != NULL);
+  assert(output != NULL);
+
+  size_t vl;
+  // 使用for循环进行向量处理
+  for (size_t i = 0; i < batch; i += vl) {
+    // 动态设置向量长度
+    vl = vsetvl_e32m8(batch - i);
+
+    // 加载输入向量
+    vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
+    vfloat32m8_t vb = vle32_v_f32m8(input_b + i, vl);
+
+    // 执行向量乘法
+    vfloat32m8_t vacc = vfmul_vv_f32m8(va, vb, vl);
+
+    // 应用最小值约束
+    vacc = vfmax_vf_f32m8(vacc, params->scalar.min, vl);
+
+    // 应用最大值约束
+    vacc = vfmin_vf_f32m8(vacc, params->scalar.max, vl);
+
+    // 将结果存储回output数组
     vse32_v_f32m8(output + i, vacc, vl);
   }
 }

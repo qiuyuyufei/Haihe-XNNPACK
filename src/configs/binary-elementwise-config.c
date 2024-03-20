@@ -729,7 +729,11 @@ static void init_f32_vmul_config(void) {
     f32_vmul_config.init.f32_minmax = xnn_init_f32_minmax_scalar_params;
     f32_vmul_config.minmax.element_tile = 8;
   #elif XNN_ARCH_RISCV
+  #if XNN_ENABLE_RISCV_VECTOR
+    f32_vmul_config.minmax.op_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vmul_minmax_ukernel__rvv_u8v;
+  #else
     f32_vmul_config.minmax.op_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vmul_minmax_ukernel__scalar_u8;
+  #endif
     f32_vmul_config.minmax.opc_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vmulc_minmax_ukernel__scalar_u8;
     f32_vmul_config.minmax.ropc_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vmulc_minmax_ukernel__scalar_u8;
     f32_vmul_config.init.f32_minmax = xnn_init_f32_minmax_scalar_params;
@@ -821,7 +825,11 @@ static void init_f32_vsub_config(void) {
     f32_vsub_config.init.f32_minmax = xnn_init_f32_minmax_scalar_params;
     f32_vsub_config.minmax.element_tile = 8;
   #elif XNN_ARCH_RISCV
+  #if XNN_ENABLE_RISCV_VECTOR
+    f32_vsub_config.minmax.op_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vsub_minmax_ukernel__rvv_u8v;
+  #else
     f32_vsub_config.minmax.op_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vsub_minmax_ukernel__scalar_u8;
+  #endif
     f32_vsub_config.minmax.opc_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vsubc_minmax_ukernel__scalar_u8;
     f32_vsub_config.minmax.ropc_ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vrsubc_minmax_ukernel__scalar_u8;
     f32_vsub_config.init.f32_minmax = xnn_init_f32_minmax_scalar_params;
