@@ -610,3 +610,62 @@ void xnn_f32_gemm_ukernel_4x2__rvv_u1v(
     vse32_v_f32m1(c0, vacc, vl); // store result
   }
 }
+
+void xnn_f32_vsigmoid_ukernel__rvv(
+  size_t batch,
+  const float* input,
+  float* output,
+  const union xnn_f32_sigmoid_params params[restrict XNN_MIN_ELEMENTS(1)])
+){
+  assert(input != NULL);
+  assert(output != NULL);
+
+  const float vmagic_bias = params.scalar_rr2_lut64_p2.magic_bias;
+  const float vminus_log2e = params.scalar_rr2_lut64_p2.minus_log2e;
+  const uint32_t vindex_mask = UINT32_C(0x3F);
+  const float vln2_hi = params.scalar_rr2_lut64_p2.ln2_hi;
+  const float vln2_lo = params.scalar_rr2_lut64_p2.ln2_lo;
+  const float vc2 = params.scalar_rr2_lut64_p2.c2;
+  const float vone = params.scalar_rr2_lut64_p2.one;
+  const float vdenorm_cutoff = params.scalar_rr2_lut64_p2.denorm_cutoff;
+
+  size_t vl;
+
+  for (size_t i = 0; i < batch; i += vl) {
+    vl = vsetvl_e32m8(batch - i);
+
+    vfloat32m8_t vx = vle32_v_f32m8(input + i, vl);
+    // get abs
+    vfloat32m8_t vz = vabs_v_f32m8(vx, vl);
+
+    // vz*(-log2(e))+magic_bias
+    vfloat32m8_t vn = vadd_vf_f32m8(vmul_vf_f32m8(vz, vminus_log2e, vl), vmagic_bias, vl);
+
+    // get exponent
+    vuint32m8_t ve = vusll_vu_i32m8(vcvt_xu_f_v_u32m8(vn, vl), 17, vl);
+
+    // find index in lookup table using mask
+    vuint32m8_t vidx = vand_vf_u32m8(vfcvt_xu_f_v_u32m8(vn, vl), vindex_mask, vl);
+    vfloat32m8_t vs =  vcvt_xu_f_v_u32m8(vadd_vv_f32m8(vrgather_vv_i32m1(xnn_table_exp2minus_k_over_64, vidx, vl), ve0, vl), vl);
+
+    // remove magic bias
+    vn = vsub_vf_f32m8(vn, vmagic_bias, vl);
+
+    // find logarithm
+    vfloat32m8_t vt = vadd_vv_f32m8(vfmul_vf_f32m8(vn, vln2_hi, vl), vz, vl);
+    vt = vadd_vv_f32m8(vmul_vf_f32m8(vn, vln2_lo, vl), vt, vl);
+
+    // calculate the quadratic term logarithmically.
+    vfloat32m8_t vp = vmul_vf_f32m8(vt, vc2, vl);
+    vp = vsub_vv_f32m8(vt, vmul_vv_f32m8(vp, vt, vl), vl);
+
+    // caculate sigmoid polynomial approximation
+    vfloat32m8_t vy = vsub_vv_f32m8(vs, vmul_vv_f32m8(vs, vp, vl), vl);
+    vfloat32m8_t vd = vadd_vf_f32m8(vy, vone, vl);
+    vfloat32m8_t vf = vdiv_vv_f32m8(vy, vd, vl);
+
+    // store result
+    vse32_v_f32m8(output + i, vf, vl);
+  }
+}
+}
