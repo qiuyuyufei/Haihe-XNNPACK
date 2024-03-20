@@ -901,7 +901,7 @@ void xnn_f32_prelu_ukernel__rvv_2x8(
 }
 
 //向量除法
-void xnn_f32_vdiv_minmax_ukernel__rvv_u2v(
+void xnn_f32_vdiv_minmax_ukernel__rvv_u1v(
     size_t batch,
     const float* input_a,
     const float* input_b,
@@ -988,7 +988,7 @@ void xnn_f32_vsub_minmax_ukernel__rvv_u8v(
   // 逐批处理
   for (size_t i = 0; i < batch; i += vl) {
     // 动态计算向量长度（VL），这次基于剩余的元素数量
-    size_t vl = vsetvl_e32m8(batch - i);
+    vl = vsetvl_e32m8(batch - i);
 
     // 加载输入向量
     vfloat32m8_t va = vle32_v_f32m8(input_a + i, vl);
