@@ -610,3 +610,108 @@ void xnn_f32_gemm_ukernel_4x2__rvv_u1v(
     vse32_v_f32m1(c0, vacc, vl); // store result
   }
 }
+
+void xnn_f32_gemm_relu_ukernel_1x4__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 1);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  const float* a0 = a;
+  float* c0 = c;
+  size_t kcl = kc / sizeof(float);
+
+  do {
+    size_t vl = vsetvl_e32m1(nc);
+    vfloat32m1_t vacc = vle32_v_f32m1(w, vl);
+    w += vl;
+    for(size_t k = 0; k < kcl ; k++){
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+      w += vl;
+      vacc = vfmacc_vf_f32m1(vacc, *a0, vw, vl);
+      a0++;
+    }
+    vacc = vfmax_vf_f32m1(vacc, 0.0, vl);
+
+    vse32_v_f32m1(c0, vacc, vl);
+    if(nc >= 4){
+          c0 = (float*) ((uintptr_t) c0 + cn_stride);
+          a0 = (const void*) ((uintptr_t) a0 - kc);
+    }
+    nc -= vl;
+  } while (nc != 0);
+}
+
+void xnn_f32_gemm_relu_ukernel_2x4__rvv_u1v(
+    size_t mr,
+    size_t nc,
+    size_t kc,
+    const float* restrict a,
+    size_t a_stride,
+    const float* restrict w,
+    float* restrict c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(mr != 0);
+  assert(mr <= 2); // max process 2 row
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(kc % sizeof(float) == 0);
+  assert(a != NULL);
+  assert(w != NULL);
+  assert(c != NULL);
+
+  const float* a0 = a;
+  const float* a1 = a + a_stride;
+  float* c0 = c;
+  float* c1 = c + cm_stride;
+  size_t kcl = kc / sizeof(float);
+
+  do {
+    size_t vl = vsetvl_e32m1(nc);
+    vfloat32m1_t vacc0 = vfsub_vv_f32m1(vle32_v_f32m1(c0, vl), vle32_v_f32m1(c0, vl), vl); // 0th row count
+    vfloat32m1_t vacc1 = vfsub_vv_f32m1(vle32_v_f32m1(c1, vl), vle32_v_f32m1(c1, vl), vl); // 1st row count
+    w += vl;
+    for(size_t k = 0; k < kcl ; k++){
+      vfloat32m1_t va0 = vfmv_v_f_f32m1(*a0, vl);
+      vfloat32m1_t va1 = vfmv_v_f_f32m1(*a1, vl);
+      vfloat32m1_t vw = vle32_v_f32m1(w, vl);
+      vacc0 = vfmacc_vv_f32m1(vacc0, va0, vw, vl);
+      vacc1 = vfmacc_vv_f32m1(vacc1, va1, vw, vl);
+      a0++;
+      a1++;
+    }
+
+    vacc0 = vfmax_vf_f32m1(vacc0, 0.0, vl);
+    vacc1 = vfmax_vf_f32m1(vacc1, 0.0, vl);
+    vse32_v_f32m1(c0, vacc0, vl);
+    vse32_v_f32m1(c1, vacc1, vl);
+
+    if(nc >= 4){
+
+      c0 = (float*) ((uintptr_t) c0 + cn_stride);
+      c1 = (float*) ((uintptr_t) c1 + cn_stride);
+
+      a0 = (const void*) ((uintptr_t) a0 - kc);
+      a1 = (const void*) ((uintptr_t) a1 - kc);
+    }
+    nc -= vl;
+  } while (nc != 0);
+}
