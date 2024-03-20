@@ -33,3 +33,5 @@ out/
 ehthumbs.db
 Thumbs.db
 *.swp
+
+.vscode
