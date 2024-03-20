@@ -819,14 +819,14 @@ void xnn_f32_prelu_ukernel__rvv_2x8(
       const vfloat32m1_t vi1x4567 = vle32_v_f32m1(i1, vl); // load 4 input
       i1 += 4;
 
-      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc0x0123 = vfmul_vv_f32m1(vi0x0123, vw0123, vl); // multiplication
       //neon: const uint32x4_t vm0x0123 = vcltq_s32(vreinterpretq_s32_f32(vi0x0123), vmovq_n_s32(0));
       const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
-      vfloat32m1_t vacc0x4567 = vfmul_vf_f32m1(vi0x4567, vw4567, vl); // multiplication
+      vfloat32m1_t vacc0x4567 = vfmul_vv_f32m1(vi0x4567, vw4567, vl); // multiplication
       const vbool32_t vm0x4567 = vmflt_vf_f32m1_b32(vi0x4567, .0f, vl);
-      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc1x0123 = vfmul_vv_f32m1(vi1x0123, vw0123, vl); // multiplication
       const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
-      vfloat32m1_t vacc1x4567 = vfmul_vf_f32m1(vi1x4567, vw4567, vl); // multiplication
+      vfloat32m1_t vacc1x4567 = vfmul_vv_f32m1(vi1x4567, vw4567, vl); // multiplication
       const vbool32_t vm1x4567 = vmflt_vf_f32m1_b32(vi1x4567, .0f, vl);
       // neon:
       // vacc0x0123 = vbslq_f32(vm0x0123, vacc0x0123, vi0x0123);
@@ -857,9 +857,9 @@ void xnn_f32_prelu_ukernel__rvv_2x8(
       const vfloat32m1_t vi1x0123 = vle32_v_f32m1(i1, vl); // load 4 input
       i1 += 4;
 
-      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc0x0123 = vfmul_vv_f32m1(vi0x0123, vw0123, vl); // multiplication
       const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
-      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc1x0123 = vfmul_vv_f32m1(vi1x0123, vw0123, vl); // multiplication
       const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
 
       vacc0x0123 = vmerge_vvm_f32m1(vm0x0123, vacc0x0123, vi0x0123, vl);
@@ -879,9 +879,9 @@ void xnn_f32_prelu_ukernel__rvv_2x8(
       const vfloat32m1_t vi1x0123 = vle32_v_f32m1(i1, vl); // load 4 input
       i1 = (const float*) ((uintptr_t) i1 + c);
 
-      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc0x0123 = vfmul_vv_f32m1(vi0x0123, vw0123, vl); // multiplication
       const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
-      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      vfloat32m1_t vacc1x0123 = vfmul_vv_f32m1(vi1x0123, vw0123, vl); // multiplication
       const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
 
       vacc0x0123 = vmerge_vvm_f32m1(vm0x0123, vacc0x0123, vi0x0123, vl);
