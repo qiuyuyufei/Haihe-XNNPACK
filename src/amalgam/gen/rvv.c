@@ -716,6 +716,190 @@ void xnn_f32_gemm_relu_ukernel_2x4__rvv_u1v(
   } while (nc != 0);
 }
 
+void xnn_f32_vsigmoid_ukernel__rvv(
+  size_t batch,
+  const float* input,
+  float* output,
+  const union xnn_f32_sigmoid_params params[restrict XNN_MIN_ELEMENTS(1)])
+){
+  assert(input != NULL);
+  assert(output != NULL);
+
+  const float vmagic_bias = params.scalar_rr2_lut64_p2.magic_bias;
+  const float vminus_log2e = params.scalar_rr2_lut64_p2.minus_log2e;
+  const uint32_t vindex_mask = UINT32_C(0x3F);
+  const float vln2_hi = params.scalar_rr2_lut64_p2.ln2_hi;
+  const float vln2_lo = params.scalar_rr2_lut64_p2.ln2_lo;
+  const float vc2 = params.scalar_rr2_lut64_p2.c2;
+  const float vone = params.scalar_rr2_lut64_p2.one;
+  const float vdenorm_cutoff = params.scalar_rr2_lut64_p2.denorm_cutoff;
+
+  size_t vl;
+
+  for (size_t i = 0; i < batch; i += vl) {
+    vl = vsetvl_e32m8(batch - i);
+
+    vfloat32m8_t vx = vle32_v_f32m8(input + i, vl);
+    // get abs
+    vfloat32m8_t vz = vabs_v_f32m8(vx, vl);
+
+    // vz*(-log2(e))+magic_bias
+    vfloat32m8_t vn = vadd_vf_f32m8(vmul_vf_f32m8(vz, vminus_log2e, vl), vmagic_bias, vl);
+
+    // get exponent
+    vuint32m8_t ve = vusll_vu_i32m8(vcvt_xu_f_v_u32m8(vn, vl), 17, vl);
+
+    // find index in lookup table using mask
+    vuint32m8_t vidx = vand_vf_u32m8(vfcvt_xu_f_v_u32m8(vn, vl), vindex_mask, vl);
+    vfloat32m8_t vs =  vcvt_xu_f_v_u32m8(vadd_vv_f32m8(vrgather_vv_i32m1(xnn_table_exp2minus_k_over_64, vidx, vl), ve0, vl), vl);
+
+    // remove magic bias
+    vn = vsub_vf_f32m8(vn, vmagic_bias, vl);
+
+    // find logarithm
+    vfloat32m8_t vt = vadd_vv_f32m8(vfmul_vf_f32m8(vn, vln2_hi, vl), vz, vl);
+    vt = vadd_vv_f32m8(vmul_vf_f32m8(vn, vln2_lo, vl), vt, vl);
+
+    // calculate the quadratic term logarithmically.
+    vfloat32m8_t vp = vmul_vf_f32m8(vt, vc2, vl);
+    vp = vsub_vv_f32m8(vt, vmul_vv_f32m8(vp, vt, vl), vl);
+
+    // caculate sigmoid polynomial approximation
+    vfloat32m8_t vy = vsub_vv_f32m8(vs, vmul_vv_f32m8(vs, vp, vl), vl);
+    vfloat32m8_t vd = vadd_vf_f32m8(vy, vone, vl);
+    vfloat32m8_t vf = vdiv_vv_f32m8(vy, vd, vl);
+
+    // store result
+    vse32_v_f32m8(output + i, vf, vl);
+  }
+}
+
+void xnn_f32_prelu_ukernel__rvv_2x8(
+  size_t rows,
+  size_t channels,
+  const float* restrict input,
+  size_t input_stride,
+  const float* restrict weights,
+  float* restrict output,
+  size_t output_stride)
+{
+  assert(rows != 0); 
+  assert(channels != 0);
+  assert(channels % sizeof(float) == 0);
+
+  const float* i0 = input;
+  float* o0 = output;
+  const float* i1 = (const float*) ((uintptr_t) i0 + input_stride);
+  float* o1 = (float*) ((uintptr_t) o0 + output_stride);
+
+  const size_t input_increment = input_stride * 2 - channels;
+  const size_t output_increment = output_stride * 2 - channels;
+
+  do {
+    if XNN_UNPREDICTABLE(rows < 2) { // if rows < 2, process 1 row
+      i1 = i0;
+      o1 = o0;
+    }
+
+    const float* w = weights; // pointer to first element of weights
+    size_t c = channels; // initialize number of channels
+    for(; c >= 8 * sizeof(float); c -= 8 * sizeof(float)) {
+      const size_t vl = vsetvl_e32m1(c); // set vector length
+      const vfloat32m1_t vw0123 = vle32_v_f32m1(w, vl); // load 4 weights 
+      w += 4;
+      const vfloat32m1_t vw4567 = vle32_v_f32m1(w, vl); // load 4 weights
+      w += 4;
+
+      const vfloat32m1_t vi0x0123 = vle32_v_f32m1(i0, vl); // load 4 input
+      i0 += 4;
+      const vfloat32m1_t vi0x4567 = vle32_v_f32m1(i0, vl); // load 4 input
+      i0 += 4;
+      const vfloat32m1_t vi1x0123 = vle32_v_f32m1(i1, vl); // load 4 input
+      i1 += 4;
+      const vfloat32m1_t vi1x4567 = vle32_v_f32m1(i1, vl); // load 4 input
+      i1 += 4;
+
+      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      //neon: const uint32x4_t vm0x0123 = vcltq_s32(vreinterpretq_s32_f32(vi0x0123), vmovq_n_s32(0));
+      const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
+      vfloat32m1_t vacc0x4567 = vfmul_vf_f32m1(vi0x4567, vw4567, vl); // multiplication
+      const vbool32_t vm0x4567 = vmflt_vf_f32m1_b32(vi0x4567, .0f, vl);
+      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
+      vfloat32m1_t vacc1x4567 = vfmul_vf_f32m1(vi1x4567, vw4567, vl); // multiplication
+      const vbool32_t vm1x4567 = vmflt_vf_f32m1_b32(vi1x4567, .0f, vl);
+      // neon:
+      // vacc0x0123 = vbslq_f32(vm0x0123, vacc0x0123, vi0x0123);
+      // vacc0x4567 = vbslq_f32(vm0x4567, vacc0x4567, vi0x4567);
+      // vacc1x0123 = vbslq_f32(vm1x0123, vacc1x0123, vi1x0123);
+      // vacc1x4567 = vbslq_f32(vm1x4567, vacc1x4567, vi1x4567);
+      vacc0x0123 = vmerge_vvm_f32m1(vm0x0123, vacc0x0123, vi0x0123, vl);
+      vacc0x4567 = vmerge_vvm_f32m1(vm0x4567, vacc0x4567, vi0x4567, vl);
+      vacc1x0123 = vmerge_vvm_f32m1(vm1x0123, vacc1x0123, vi1x0123, vl);
+      vacc1x4567 = vmerge_vvm_f32m1(vm1x4567, vacc1x4567, vi1x4567, vl);
+
+      vse32_v_f32m1(o0, vacc0x0123, vl); // store result
+      o0 += 4;
+      vse32_v_f32m1(o0, vacc0x4567, vl); // store result
+      o0 += 4;
+      vse32_v_f32m1(o1, vacc1x0123, vl); // store result
+      o1 += 4;
+      vse32_v_f32m1(o1, vacc1x4567, vl); // store result
+      o1 += 4;
+    }
+
+    for (; c >= 4 * sizeof(float); c -= 4 * sizeof(float)) { // process 4 cols
+      const size_t vl = vsetvl_e32m1(c);
+      const vfloat32m1_t vw0123 = vle32_v_f32m1(w, vl); // load 4 weights
+      w += 4;
+      const vfloat32m1_t vi0x0123 = vle32_v_f32m1(i0, vl); // load 4 input
+      i0 += 4;
+      const vfloat32m1_t vi1x0123 = vle32_v_f32m1(i1, vl); // load 4 input
+      i1 += 4;
+
+      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
+      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
+
+      vacc0x0123 = vmerge_vvm_f32m1(vm0x0123, vacc0x0123, vi0x0123, vl);
+      vacc1x0123 = vmerge_vvm_f32m1(vm1x0123, vacc1x0123, vi1x0123, vl);
+
+      vse32_v_f32m1(o0, vacc0x0123, vl); // store result
+      o0 += 4;
+      vse32_v_f32m1(o1, vacc1x0123, vl); // store result
+      o1 += 4;
+    }
+    if XNN_UNLIKELY(c != 0) { // 
+      const size_t vl = vsetvl_e32m1(c);
+      const vfloat32m1_t vw0123 = vle32_v_f32m1(w, vl); // load 4 weights
+      w += 4;
+      const vfloat32m1_t vi0x0123 = vle32_v_f32m1(i0, vl); // load 4 input
+      i0 = (const float*) ((uintptr_t) i0 + c);
+      const vfloat32m1_t vi1x0123 = vle32_v_f32m1(i1, vl); // load 4 input
+      i1 = (const float*) ((uintptr_t) i1 + c);
+
+      vfloat32m1_t vacc0x0123 = vfmul_vf_f32m1(vi0x0123, vw0123, vl); // multiplication
+      const vbool32_t vm0x0123 = vmflt_vf_f32m1_b32(vi0x0123, .0f, vl);
+      vfloat32m1_t vacc1x0123 = vfmul_vf_f32m1(vi1x0123, vw0123, vl); // multiplication
+      const vbool32_t vm1x0123 = vmflt_vf_f32m1_b32(vi1x0123, .0f, vl);
+
+      vacc0x0123 = vmerge_vvm_f32m1(vm0x0123, vacc0x0123, vi0x0123, vl);
+      vacc1x0123 = vmerge_vvm_f32m1(vm1x0123, vacc1x0123, vi1x0123, vl);
+
+      vse32_v_f32m1(o0, vacc0x0123, vl); // store result
+      o0 = (float*) ((uintptr_t) o0 + c); 
+      vse32_v_f32m1(o1, vacc1x0123, vl); // store result
+      o1 = (float*) ((uintptr_t) o1 + c);
+    }
+    i0 = (const float*) ((uintptr_t) i0 + input_increment);
+    o0 = (float*) ((uintptr_t) o0 + output_increment);
+    i1 = (const float*) ((uintptr_t) i1 + input_increment);
+    o1 = (float*) ((uintptr_t) o1 + output_increment);
+    rows = doz(rows, 2);
+  } while (rows != 0);
+}
+
 //向量除法
 void xnn_f32_vdiv_minmax_ukernel__rvv_u2v(
     size_t batch,
@@ -862,4 +1046,3 @@ void xnn_f32_vmul_minmax_ukernel__rvv_u8v(
     vse32_v_f32m8(output + i, vacc, vl);
   }
 }
-

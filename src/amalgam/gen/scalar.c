@@ -14016,40 +14016,49 @@ void xnn_f32_vsigmoid_ukernel__scalar_rr2_lut64_p2_div_u2(
   const float vone = params->scalar_rr2_lut64_p2.one;
   const float vdenorm_cutoff = params->scalar_rr2_lut64_p2.denorm_cutoff;
 
+  // process two point each time
   for (; batch >= 2 * sizeof(float); batch -= 2 * sizeof(float)) {
     const float vx0 = input[0];
     const float vx1 = input[1];
     input += 2;
 
+    // get abs
     const float vz0 = fabsf(vx0);
     const float vz1 = fabsf(vx1);
 
+    // vz*(-log2(e))+magic_bias
     float vn0 = vz0 * vminus_log2e + vmagic_bias;
     float vn1 = vz1 * vminus_log2e + vmagic_bias;
 
+    // get exponent
     const uint32_t ve0 = float_as_uint32(vn0) << 17;
     const uint32_t ve1 = float_as_uint32(vn1) << 17;
 
+    // find index in lookup table using mask
     const uint32_t vidx0 = float_as_uint32(vn0) & vindex_mask;
     const float vs0 = uint32_as_float(xnn_table_exp2minus_k_over_64[vidx0] + ve0);
     const uint32_t vidx1 = float_as_uint32(vn1) & vindex_mask;
     const float vs1 = uint32_as_float(xnn_table_exp2minus_k_over_64[vidx1] + ve1);
 
+    // remove magic bias
     vn0 -= vmagic_bias;
     vn1 -= vmagic_bias;
 
+    // find logarithm
     float vt0 = vn0 * vln2_hi + vz0;
     float vt1 = vn1 * vln2_hi + vz1;
 
     vt0 = vn0 * vln2_lo + vt0;
     vt1 = vn1 * vln2_lo + vt1;
 
+    // calculate the quadratic term logarithmically.
     float vp0 = vt0 * vc2;
     float vp1 = vt1 * vc2;
 
     vp0 = vt0 - vp0 * vt0;
     vp1 = vt1 - vp1 * vt1;
 
+    // caculate sigmoid polynomial approximation
     const float vy0 = vs0 - vs0 * vp0;
     const float vy1 = vs1 - vs1 * vp1;
 
@@ -14059,6 +14068,7 @@ void xnn_f32_vsigmoid_ukernel__scalar_rr2_lut64_p2_div_u2(
     float vf0 = vy0 / vd0;
     float vf1 = vy1 / vd1;
 
+    // handling special values
     if XNN_UNPREDICTABLE(vz0 > vdenorm_cutoff) {
       vf0 = 0.0f;
     }
@@ -14073,10 +14083,12 @@ void xnn_f32_vsigmoid_ukernel__scalar_rr2_lut64_p2_div_u2(
       vf1 = vone - vf1;
     }
 
+    // store result
     output[0] = vf0;
     output[1] = vf1;
     output += 2;
   }
+  // handling rest data
   if XNN_UNLIKELY(batch != 0) {
     const float vx = *input;
 
